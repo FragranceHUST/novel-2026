@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>本月工资累积器</title>
+  <style>
+    :root { color-scheme: light; --ink:#20242b; --muted:#737b87; --line:#e8ebef; --accent:#2563eb; --bg:#f5f7fa; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+    .panel { width:min(100%,560px); background:#fff; border:1px solid var(--line); border-radius:22px; padding:clamp(24px,5vw,42px); box-shadow:0 14px 45px rgba(25,35,50,.07); }
+    .eyebrow { color:var(--muted); font-size:13px; letter-spacing:.08em; }
+    h1 { margin:10px 0 6px; font-size:clamp(23px,5vw,30px); }
+    .month { color:var(--muted); font-size:14px; }
+    .amount-label { margin-top:38px; color:var(--muted); font-size:14px; }
+    .amount { margin:8px 0 4px; font-size:clamp(38px,9vw,58px); font-weight:750; letter-spacing:-.04em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+    .sub { color:var(--muted); font-size:14px; }
+    .track { height:9px; margin:26px 0 10px; background:#edf0f4; border-radius:99px; overflow:hidden; }
+    .fill { height:100%; width:0%; background:var(--accent); border-radius:99px; transition:width .3s ease; }
+    .progress-row { display:flex; justify-content:space-between; gap:12px; color:var(--muted); font-size:13px; }
+    .settings { margin-top:34px; padding-top:25px; border-top:1px solid var(--line); }
+    label { display:block; margin-bottom:9px; font-size:14px; font-weight:600; }
+    .input-row { display:flex; gap:10px; }
+    input { flex:1; min-width:0; padding:13px 14px; border:1px solid #d9dee6; border-radius:11px; font-size:16px; outline:none; }
+    input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+    button { border:0; border-radius:11px; padding:0 18px; background:var(--ink); color:white; font-size:14px; font-weight:600; cursor:pointer; }
+    button:hover { opacity:.88; }
+    .hint { margin:10px 0 0; color:var(--muted); font-size:12px; line-height:1.6; }
+    .details { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:24px; }
+    .detail { padding:14px; background:#f7f8fa; border-radius:12px; }
+    .detail span { display:block; color:var(--muted); font-size:12px; margin-bottom:6px; }
+    .detail strong { font-size:16px; font-variant-numeric:tabular-nums; }
+    @media(max-width:420px) { .input-row { flex-direction:column; } button { min-height:46px; } }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <div class="eyebrow">MONTHLY INCOME TRACKER</div>
+    <h1>本月工资累积</h1>
+    <div class="month" id="monthText">正在读取当前月份…</div>
+
+    <div class="amount-label">截至此刻，预计已赚取</div>
+    <div class="amount" id="earned">¥0.00</div>
+    <div class="sub" id="salaryText">请先设置本月税前或税后工资</div>
+
+    <div class="track"><div class="fill" id="progress"></div></div>
+    <div class="progress-row">
+      <span id="progressText">0.00%</span>
+      <span id="daysText">—</span>
+    </div>
+
+    <section class="details">
+      <div class="detail"><span>本月工资上限</span><strong id="capText">未设置</strong></div>
+      <div class="detail"><span>距离月末还差</span><strong id="remainingText">—</strong></div>
+    </section>
+
+    <section class="settings">
+      <label for="salaryInput">设置每月固定工资（人民币）</label>
+      <div class="input-row">
+        <input id="salaryInput" type="number" min="0" step="0.01" inputmode="decimal" placeholder="例如：30000">
+        <button id="saveButton" type="button">保存工资</button>
+      </div>
+      <p class="hint">按现实日历月自动计算：从本月 1 日 00:00 起，按本月已经过的实际时间匀速累积，至下月 1 日 00:00 达到工资上限。工资设置保存在当前浏览器中。</p>
+    </section>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "monthlySalaryCap";
+    const money = value => new Intl.NumberFormat("zh-CN", {
+      style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 2
+    }).format(value);
+
+    const salaryInput = document.getElementById("salaryInput");
+    const savedSalary = localStorage.getItem(STORAGE_KEY);
+    if (savedSalary !== null) salaryInput.value = savedSalary;
+
+    function update() {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+      const salary = Math.max(0, Number(localStorage.getItem(STORAGE_KEY)) || 0);
+      const total = end.getTime() - start.getTime();
+      const elapsed = Math.min(total, Math.max(0, now.getTime() - start.getTime()));
+      const ratio = total > 0 ? elapsed / total : 0;
+      const earned = salary * ratio;
+      const remaining = Math.max(0, salary - earned);
+      const monthLabel = new Intl.DateTimeFormat("zh-CN", { year:"numeric", month:"long" }).format(now);
+
+      document.getElementById("monthText").textContent = monthLabel + " · 按本地系统时间实时计算";
+      document.getElementById("earned").textContent = money(earned);
+      document.getElementById("salaryText").textContent = salary > 0 ? "本月工资按时间进度匀速累积" : "请先设置本月工资上限";
+      document.getElementById("capText").textContent = salary > 0 ? money(salary) : "未设置";
+      document.getElementById("remainingText").textContent = salary > 0 ? money(remaining) : "—";
+      document.getElementById("progress").style.width = (ratio * 100) + "%";
+      document.getElementById("progressText").textContent = (ratio * 100).toFixed(2) + "%";
+      const days = (end.getTime() - now.getTime()) / 86400000;
+      document.getElementById("daysText").textContent = `本月已过 ${(elapsed / 86400000).toFixed(2)} 天 · 剩余 ${days.toFixed(2)} 天`;
+    }
+
+    document.getElementById("saveButton").addEventListener("click", () => {
+      const value = Number(salaryInput.value);
+      if (!Number.isFinite(value) || value < 0 || salaryInput.value.trim() === "") {
+        alert("请输入有效的工资金额。");
+        return;
+      }
+      localStorage.setItem(STORAGE_KEY, String(value));
+      update();
+    });
+    salaryInput.addEventListener("keydown", event => {
+      if (event.key === "Enter") document.getElementById("saveButton").click();
+    });
+
+    update();
+    setInterval(update, 1000);
+  </script>
+</body>
+</html>
